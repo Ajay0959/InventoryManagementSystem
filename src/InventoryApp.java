@@ -151,7 +151,7 @@ public class InventoryApp extends JFrame {
 
         // Functional Filter Panel
         JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
-        filterPanel.setBorder(BorderFactory.createTitledBorder("Functional Programming Filters (Java Streams)"));
+        filterPanel.setBorder(BorderFactory.createTitledBorder("Filter Options"));
 
         String[] categories = {"Accessories", "Audio", "Power", "Wearables", "Storage", "Connectivity"};
         categoryComboBox = new JComboBox<>(categories);
