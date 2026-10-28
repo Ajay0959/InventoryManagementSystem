@@ -32,6 +32,20 @@ class Product {
     public void setQuantity(int quantity) { this.quantity = quantity; }
 }
 
+class CartItem {
+    private Product product;
+    private int quantity;
+
+    public CartItem(Product product, int quantity) {
+        this.product = product;
+        this.quantity = quantity;
+    }
+
+    public Product getProduct() { return product; }
+    public int getQuantity() { return quantity; }
+    public double getTotalPrice() { return product.getPrice() * quantity; }
+}
+
 class Inventory {
     private List<Product> products = new ArrayList<>();
 
@@ -54,48 +68,69 @@ class Inventory {
 // ==========================================
 public class InventoryApp extends JFrame {
     private Inventory inventory;
-    private DefaultTableModel tableModel;
-    private JTable table;
+    private List<CartItem> cart;
     
-    // Form Input Fields
+    // Inventory Table Components
+    private DefaultTableModel inventoryTableModel;
+    private JTable inventoryTable;
     private JTextField idField, nameField, categoryField, priceField, qtyField;
-    // Checkout Fields
-    private JTextField sellIdField, sellQtyField;
+    private JComboBox<String> categoryComboBox;
+
+    // Billing / Cart Components
+    private DefaultTableModel cartTableModel;
+    private JTable cartTable;
+    private JTextField cartIdField, cartQtyField;
+    private JLabel grandTotalLabel;
 
     public InventoryApp() {
         inventory = new Inventory();
+        cart = new ArrayList<>();
         
-        // Added realistic real-world electronics items
+        // Realistic electronics sample data
         inventory.addProduct(new Product("E001", "Wireless Mouse", "Accessories", 750.0, 15));
-        inventory.addProduct(new Product("E002", "Mechanical Keyboard", "Accessories", 2999.0, 4)); // Low stock
+        inventory.addProduct(new Product("E002", "Mechanical Keyboard", "Accessories", 2999.0, 4));
         inventory.addProduct(new Product("E003", "USB-C Hub", "Connectivity", 1250.0, 8));
-        inventory.addProduct(new Product("E004", "Gaming Headset", "Audio", 3499.0, 2)); // Low stock
+        inventory.addProduct(new Product("E004", "Gaming Headset", "Audio", 3499.0, 2));
         inventory.addProduct(new Product("E005", "Fast Wall Charger 20W", "Power", 899.0, 25));
         inventory.addProduct(new Product("E006", "Type-C Braided Cable", "Accessories", 399.0, 40));
         inventory.addProduct(new Product("E007", "Bluetooth Earbuds", "Audio", 1999.0, 12));
         inventory.addProduct(new Product("E008", "Portable Power Bank 10000mAh", "Power", 1599.0, 6));
-        inventory.addProduct(new Product("E009", "Smart Fitness Band", "Wearables", 2499.0, 3)); // Low stock
+        inventory.addProduct(new Product("E009", "Smart Fitness Band", "Wearables", 2499.0, 3));
         inventory.addProduct(new Product("E010", "External SSD 512GB", "Storage", 4500.0, 5));
 
-        setTitle("Electronics Retail Inventory & Billing System - Assignment CSD207B");
-        setSize(850, 600);
+        setTitle("Electronics Retail Inventory & Multi-Item Billing System");
+        setSize(950, 650);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
-        setLayout(new BorderLayout(10, 10));
 
-        // --- TOP: TABLE DISPLAY ---
+        // --- TABBED INTERFACE ---
+        JTabbedPane tabbedPane = new JTabbedPane();
+        tabbedPane.addTab("Inventory Management & Filters", createInventoryPanel());
+        tabbedPane.addTab("POS & Multi-Item Billing", createBillingPanel());
+
+        add(tabbedPane);
+    }
+
+    // ==========================================
+    // TAB 1: INVENTORY MANAGEMENT PANEL
+    // ==========================================
+    private JPanel createInventoryPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        // Table
         String[] columnNames = {"ID", "Name", "Category", "Price (₹)", "Quantity"};
-        tableModel = new DefaultTableModel(columnNames, 0);
-        table = new JTable(tableModel);
-        refreshTable(inventory.getAllProducts());
-        add(new JScrollPane(table), BorderLayout.CENTER);
+        inventoryTableModel = new DefaultTableModel(columnNames, 0);
+        inventoryTable = new JTable(inventoryTableModel);
+        refreshInventoryTable(inventory.getAllProducts());
+        panel.add(new JScrollPane(inventoryTable), BorderLayout.CENTER);
 
-        // --- CENTER-SOUTH: FORMS & CONTROLS ---
-        JPanel bottomContainer = new JPanel(new GridLayout(2, 1, 5, 5));
+        // Controls & Forms
+        JPanel southContainer = new JPanel(new GridLayout(2, 1, 5, 5));
 
-        // Form 1: Add Product & Delete Product
+        // Add/Delete Form
         JPanel formPanel = new JPanel(new GridLayout(3, 4, 5, 5));
-        formPanel.setBorder(BorderFactory.createTitledBorder("Product Management"));
+        formPanel.setBorder(BorderFactory.createTitledBorder("Product Operations"));
 
         idField = new JTextField();
         nameField = new JTextField();
@@ -103,54 +138,37 @@ public class InventoryApp extends JFrame {
         priceField = new JTextField();
         qtyField = new JTextField();
 
-        formPanel.add(new JLabel("ID:"));
-        formPanel.add(idField);
-        formPanel.add(new JLabel("Name:"));
-        formPanel.add(nameField);
-        
-        formPanel.add(new JLabel("Category:"));
-        formPanel.add(categoryField);
-        formPanel.add(new JLabel("Price (₹):"));
-        formPanel.add(priceField);
-
-        formPanel.add(new JLabel("Quantity:"));
-        formPanel.add(qtyField);
+        formPanel.add(new JLabel("ID:")); formPanel.add(idField);
+        formPanel.add(new JLabel("Name:")); formPanel.add(nameField);
+        formPanel.add(new JLabel("Category:")); formPanel.add(categoryField);
+        formPanel.add(new JLabel("Price (₹):")); formPanel.add(priceField);
+        formPanel.add(new JLabel("Quantity:")); formPanel.add(qtyField);
 
         JButton addButton = new JButton("Add Product");
         JButton deleteButton = new JButton("Delete Selected");
         formPanel.add(addButton);
         formPanel.add(deleteButton);
 
-        // Form 2: Billing & Checkout + Functional Filters
-        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
-        actionPanel.setBorder(BorderFactory.createTitledBorder("Billing & Functional Filters"));
+        // Functional Filter Panel
+        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
+        filterPanel.setBorder(BorderFactory.createTitledBorder("Functional Programming Filters (Java Streams)"));
 
-        sellIdField = new JTextField(5);
-        sellQtyField = new JTextField(3);
-        JButton checkoutButton = new JButton("Process Bill / Checkout");
-        
-        JButton filterAudioBtn = new JButton("Filter: Audio");
+        String[] categories = {"Accessories", "Audio", "Power", "Wearables", "Storage", "Connectivity"};
+        categoryComboBox = new JComboBox<>(categories);
+        JButton filterCategoryBtn = new JButton("Filter Category");
         JButton lowStockBtn = new JButton("Low Stock Alert (<5)");
-        JButton resetBtn = new JButton("Show All");
+        JButton resetBtn = new JButton("Show All Products");
 
-        actionPanel.add(new JLabel("Sell ID:"));
-        actionPanel.add(sellIdField);
-        actionPanel.add(new JLabel("Qty:"));
-        actionPanel.add(sellQtyField);
-        actionPanel.add(checkoutButton);
-        actionPanel.add(filterAudioBtn);
-        actionPanel.add(lowStockBtn);
-        actionPanel.add(resetBtn);
+        filterPanel.add(categoryComboBox);
+        filterPanel.add(filterCategoryBtn);
+        filterPanel.add(lowStockBtn);
+        filterPanel.add(resetBtn);
 
-        bottomContainer.add(formPanel);
-        bottomContainer.add(actionPanel);
-        add(bottomContainer, BorderLayout.SOUTH);
+        southContainer.add(formPanel);
+        southContainer.add(filterPanel);
+        panel.add(southContainer, BorderLayout.SOUTH);
 
-        // ==========================================
-        // EVENT LISTENERS (Event-Driven Paradigm)
-        // ==========================================
-        
-        // 1. Add Product Event
+        // --- Event Listeners for Tab 1 ---
         addButton.addActionListener(e -> {
             try {
                 String id = idField.getText().trim();
@@ -165,7 +183,7 @@ public class InventoryApp extends JFrame {
                 }
 
                 inventory.addProduct(new Product(id, name, cat, price, qty));
-                refreshTable(inventory.getAllProducts());
+                refreshInventoryTable(inventory.getAllProducts());
                 clearFields();
                 JOptionPane.showMessageDialog(this, "Product added successfully!");
             } catch (NumberFormatException ex) {
@@ -173,83 +191,184 @@ public class InventoryApp extends JFrame {
             }
         });
 
-        // 2. Delete Product Event
         deleteButton.addActionListener(e -> {
-            int selectedRow = table.getSelectedRow();
+            int selectedRow = inventoryTable.getSelectedRow();
             if (selectedRow != -1) {
-                String prodId = (String) tableModel.getValueAt(selectedRow, 0);
+                String prodId = (String) inventoryTableModel.getValueAt(selectedRow, 0);
                 inventory.removeProduct(prodId);
-                refreshTable(inventory.getAllProducts());
-                JOptionPane.showMessageDialog(this, "Product " + prodId + " deleted successfully!");
+                refreshInventoryTable(inventory.getAllProducts());
+                JOptionPane.showMessageDialog(this, "Product deleted successfully!");
             } else {
-                JOptionPane.showMessageDialog(this, "Please select a row in the table to delete.", "Warning", JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Please select a row to delete.", "Warning", JOptionPane.WARNING_MESSAGE);
             }
         });
 
-        // 3. Billing & Checkout Event
-        checkoutButton.addActionListener(e -> {
-            try {
-                String id = sellIdField.getText().trim();
-                int buyQty = Integer.parseInt(sellQtyField.getText().trim());
-
-                Product product = inventory.findProductById(id);
-                if (product == null) {
-                    JOptionPane.showMessageDialog(this, "Product ID not found!", "Error", JOptionPane.ERROR_MESSAGE);
-                    return;
-                }
-
-                if (product.getQuantity() < buyQty) {
-                    JOptionPane.showMessageDialog(this, "Insufficient stock! Available: " + product.getQuantity(), "Error", JOptionPane.ERROR_MESSAGE);
-                    return;
-                }
-
-                double totalBill = product.getPrice() * buyQty;
-                product.setQuantity(product.getQuantity() - buyQty);
-                
-                refreshTable(inventory.getAllProducts());
-                sellIdField.setText("");
-                sellQtyField.setText("");
-
-                JOptionPane.showMessageDialog(this, 
-                    "--- TAX INVOICE ---\n" +
-                    "Item: " + product.getName() + "\n" +
-                    "Quantity Sold: " + buyQty + "\n" +
-                    "Total Amount: ₹" + totalBill + "\n" +
-                    "----------------------\n" +
-                    "Checkout Successful!", "Billing Receipt", JOptionPane.INFORMATION_MESSAGE);
-
-            } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(this, "Please enter a valid Product ID and Quantity to sell.", "Error", JOptionPane.ERROR_MESSAGE);
-            }
-        });
-
-        // 4. Functional Filter Event: Audio
-        filterAudioBtn.addActionListener(e -> {
+        filterCategoryBtn.addActionListener(e -> {
+            String selectedCategory = (String) categoryComboBox.getSelectedItem();
             List<Product> filtered = inventory.getAllProducts().stream()
-                    .filter(p -> p.getCategory().equalsIgnoreCase("Audio"))
+                    .filter(p -> p.getCategory().equalsIgnoreCase(selectedCategory))
                     .collect(Collectors.toList());
-            refreshTable(filtered);
+            refreshInventoryTable(filtered);
         });
 
-        // 5. Functional Filter Event: Low Stock (<5)
         lowStockBtn.addActionListener(e -> {
             List<Product> lowStock = inventory.getAllProducts().stream()
                     .filter(p -> p.getQuantity() < 5)
                     .collect(Collectors.toList());
-            refreshTable(lowStock);
+            refreshInventoryTable(lowStock);
         });
 
-        // 6. Reset Table Event
-        resetBtn.addActionListener(e -> refreshTable(inventory.getAllProducts()));
+        resetBtn.addActionListener(e -> refreshInventoryTable(inventory.getAllProducts()));
+
+        return panel;
     }
 
-    // Helper method to update JTable rows
-    private void refreshTable(List<Product> products) {
-        tableModel.setRowCount(0);
+    // ==========================================
+    // TAB 2: POS & MULTI-ITEM BILLING PANEL
+    // ==========================================
+    private JPanel createBillingPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        // Cart Table Display
+        String[] cartColumns = {"Product ID", "Item Name", "Price (₹)", "Quantity", "Total (₹)"};
+        cartTableModel = new DefaultTableModel(cartColumns, 0);
+        cartTable = new JTable(cartTableModel);
+        panel.add(new JScrollPane(cartTable), BorderLayout.CENTER);
+
+        // North: Add to Cart Form
+        JPanel addCartPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
+        addCartPanel.setBorder(BorderFactory.createTitledBorder("Add Item to Current Cart / Basket"));
+
+        cartIdField = new JTextField(6);
+        cartQtyField = new JTextField(3);
+        JButton addToCartButton = new JButton("Add to Cart");
+        JButton removeFromCartButton = new JButton("Remove Selected Item");
+
+        addCartPanel.add(new JLabel("Product ID:"));
+        addCartPanel.add(cartIdField);
+        addCartPanel.add(new JLabel("Quantity:"));
+        addCartPanel.add(cartQtyField);
+        addCartPanel.add(addToCartButton);
+        addCartPanel.add(removeFromCartButton);
+
+        panel.add(addCartPanel, BorderLayout.NORTH);
+
+        // South: Checkout & Grand Total
+        JPanel checkoutPanel = new JPanel(new BorderLayout());
+        checkoutPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+
+        grandTotalLabel = new JLabel("Grand Total: ₹0.0", JLabel.RIGHT);
+        grandTotalLabel.setFont(new Font("Arial", Font.BOLD, 16));
+        
+        JButton checkoutButton = new JButton("Complete Checkout & Generate Multi-Item Bill");
+        checkoutButton.setBackground(new Color(46, 139, 87));
+        checkoutButton.setForeground(Color.WHITE);
+        checkoutButton.setFont(new Font("Arial", Font.BOLD, 14));
+
+        checkoutPanel.add(grandTotalLabel, BorderLayout.NORTH);
+        checkoutPanel.add(checkoutButton, BorderLayout.SOUTH);
+
+        panel.add(checkoutPanel, BorderLayout.SOUTH);
+
+        // --- Event Listeners for Tab 2 ---
+        addToCartButton.addActionListener(e -> {
+            try {
+                String id = cartIdField.getText().trim();
+                int qty = Integer.parseInt(cartQtyField.getText().trim());
+
+                Product product = inventory.findProductById(id);
+                if (product == null) {
+                    JOptionPane.showMessageDialog(this, "Product ID not found in inventory!", "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                if (product.getQuantity() < qty) {
+                    JOptionPane.showMessageDialog(this, "Insufficient stock! Available: " + product.getQuantity(), "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                // Add to cart list
+                cart.add(new CartItem(product, qty));
+                refreshCartTable();
+                cartIdField.setText("");
+                cartQtyField.setText("");
+
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Please enter a valid Product ID and Quantity.", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        removeFromCartButton.addActionListener(e -> {
+            int selectedRow = cartTable.getSelectedRow();
+            if (selectedRow != -1) {
+                cart.remove(selectedRow);
+                refreshCartTable();
+            } else {
+                JOptionPane.showMessageDialog(this, "Please select an item from the cart to remove.", "Warning", JOptionPane.WARNING_MESSAGE);
+            }
+        });
+
+        checkoutButton.addActionListener(e -> {
+            if (cart.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Cart is empty! Add items before checkout.", "Warning", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            StringBuilder invoice = new StringBuilder("========== TAX INVOICE (MULTI-ITEM) ==========\n");
+            double grandTotal = 0;
+
+            // Deduct stock and build invoice
+            for (CartItem item : cart) {
+                Product p = item.getProduct();
+                int buyQty = item.getQuantity();
+
+                // Deduct from inventory stock
+                p.setQuantity(p.getQuantity() - buyQty);
+
+                double itemTotal = item.getTotalPrice();
+                grandTotal += itemTotal;
+
+                invoice.append(String.format("- %s (x%d) : ₹%.2f\n", p.getName(), buyQty, itemTotal));
+            }
+
+            invoice.append("----------------------------------------------\n");
+            invoice.append(String.format("GRAND TOTAL: ₹%.2f\n", grandTotal));
+            invoice.append("==============================================\n");
+            invoice.append("Checkout Successful! Stock updated.");
+
+            JOptionPane.showMessageDialog(this, invoice.toString(), "Multi-Item Bill Receipt", JOptionPane.INFORMATION_MESSAGE);
+
+            // Clear cart & refresh both tables
+            cart.clear();
+            refreshCartTable();
+            refreshInventoryTable(inventory.getAllProducts());
+        });
+
+        return panel;
+    }
+
+    // Helper to refresh Inventory table
+    private void refreshInventoryTable(List<Product> products) {
+        inventoryTableModel.setRowCount(0);
         for (Product p : products) {
             Object[] row = {p.getProductId(), p.getName(), p.getCategory(), "₹" + p.getPrice(), p.getQuantity()};
-            tableModel.addRow(row);
+            inventoryTableModel.addRow(row);
         }
+    }
+
+    // Helper to refresh Cart table & calculate grand total
+    private void refreshCartTable() {
+        cartTableModel.setRowCount(0);
+        double grandTotal = 0;
+        for (CartItem item : cart) {
+            Product p = item.getProduct();
+            double total = item.getTotalPrice();
+            grandTotal += total;
+            Object[] row = {p.getProductId(), p.getName(), "₹" + p.getPrice(), item.getQuantity(), "₹" + total};
+            cartTableModel.addRow(row);
+        }
+        grandTotalLabel.setText("Grand Total: ₹" + grandTotal);
     }
 
     // Helper to clear form inputs
